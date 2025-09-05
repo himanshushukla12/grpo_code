@@ -186,3 +186,4 @@ out/
 
 # vim
 *.swp
+finetuning_dataset.jsonl
