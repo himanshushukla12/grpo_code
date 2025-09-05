@@ -1,0 +1,96 @@
+base_model: Qwen/Qwen2.5-3B-Instruct
+# Configuration optimized for single GPU training
+
+load_in_8bit: false
+load_in_4bit: false
+strict: false
+
+# Disable torch_compile to avoid DTensor issues
+torch_compile: false
+
+# Single GPU vLLM configuration
+vllm:
+    host: 0.0.0.0
+    port: 8000
+    tensor_parallel_size: 1
+    gpu_memory_utilization: 0.75  # Conservative for single GPU
+    dtype: auto
+
+rl: grpo
+trl:
+  beta: 0.001    
+  use_vllm: true
+  vllm_server_host: 0.0.0.0
+  vllm_server_port: 8000
+  vllm_server_timeout: 300
+  reward_funcs:
+    - grpo_code.soft_format_reward_func
+    - grpo_code.code_execution_reward_func
+
+  num_generations: 8  # Reduced for single GPU
+  max_completion_length: 512
+  log_completions: false
+
+chat_template: qwen_25
+datasets:
+  - path: ./finetuning_dataset.jsonl
+    type: grpo_code.instruction_response_transform
+    
+# Use relative paths for better portability
+dataset_prepared_path: ./prepared_data
+dataset_processes: 1
+skip_prepare_dataset: false
+val_set_size: 0.0
+output_dir: ./outputs
+
+dataloader_prefetch_factor: 16
+dataloader_num_workers: 2
+dataloader_pin_memory: true
+
+gc_steps: 1
+sequence_len: 1024
+sample_packing: false
+eval_sample_packing: false
+pad_to_sequence_len: false
+
+# Adjusted for single GPU memory constraints
+gradient_accumulation_steps: 8  # Increase to maintain effective batch size
+micro_batch_size: 8  # Smaller batch size for single GPU
+num_epochs: 1
+max_steps: 1000  # Reduced for testing
+
+optimizer: adamw_torch_fused
+lr_scheduler: warmup_stable_decay
+lr_scheduler_kwargs:
+  num_stable_steps: 600
+  num_decay_steps: 200
+  min_lr_ratio: 0.1
+  num_cycles: 0.5
+  
+learning_rate: 5.3e-6
+max_grad_norm: 1.0
+
+train_on_inputs: false
+group_by_length: false
+
+bf16: true
+tf32: true  
+early_stopping_patience:
+resume_from_checkpoint:
+local_rank:
+logging_steps: 1
+gradient_checkpointing: true
+gradient_checkpointing_kwargs:
+  use_reentrant: false
+flash_attention: true
+
+warmup_steps: 200
+evals_per_epoch: 0
+saves_per_epoch: 0
+save_steps: 0.5
+
+# Logging configuration
+# wandb_project: grpo_code_training
+# wandb_entity: your_entity
+# wandb_name: single_gpu_test
+# hub_model_id:

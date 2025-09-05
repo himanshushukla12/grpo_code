@@ -1,0 +1,109 @@
+base_model: Qwen/Qwen2.5-3B-Instruct
+# Configuration optimized for dual GPU setup:
+# Terminal 1: vLLM server on GPU 0 (runs continuously)
+# Terminal 2: Training process on GPU 1 (connects to vLLM)
+
+load_in_8bit: false
+load_in_4bit: false
+strict: false
+
+# Disable torch_compile to avoid compatibility issues
+torch_compile: false
+
+# vLLM configuration for GPU 0 (runs in separate terminal)
+vllm:
+    host: 0.0.0.0
+    port: 8000
+    tensor_parallel_size: 1  # Single GPU for vLLM (GPU 0)
+    gpu_memory_utilization: 0.8  # More aggressive for vLLM-only GPU
+    dtype: auto
+
+rl: grpo
+trl:
+  beta: 0.001    
+  use_vllm: true
+  vllm_server_host: 0.0.0.0  # Training connects to vLLM in Terminal 1
+  vllm_server_port: 8000     # Training connects to vLLM in Terminal 1
+  vllm_server_timeout: 300
+  reward_funcs:
+    - grpo_code.soft_format_reward_func
+    - grpo_code.code_execution_reward_func
+
+  num_generations: 4  # Reduced from 8 to save memory (must be divisible by micro_batch_size)
+  max_completion_length: 256  # Reduced from 512 to save memory
+  log_completions: false
+
+chat_template: qwen_25
+datasets:
+  - path: ./finetuning_dataset.jsonl
+    type: grpo_code.instruction_response_transform
+    
+# Use relative paths and single process setup for training GPU
+dataset_prepared_path: ./prepared_data
+dataset_processes: 1
+skip_prepare_dataset: false
+val_set_size: 0.0
+output_dir: ./outputs
+
+# Optimized data loading for dual GPU setup - REDUCED MEMORY
+dataloader_prefetch_factor: 8  # Reduced from 32
+dataloader_num_workers: 1      # Reduced from 2
+dataloader_pin_memory: false   # Disabled to save memory
+
+gc_steps: 1
+sequence_len: 512  # Reduced from 1024 to save memory
+sample_packing: false
+eval_sample_packing: false
+pad_to_sequence_len: false
+
+# Optimized for single training GPU with vLLM on separate GPU - REDUCED MEMORY
+gradient_accumulation_steps: 8  # Increased to reduce effective batch size
+micro_batch_size: 4  # Reduced from 8 to save memory
+num_epochs: 1
+max_steps: 1000  # Reasonable for testing
+
+optimizer: adamw_torch_fused
+lr_scheduler: warmup_stable_decay
+lr_scheduler_kwargs:
+  num_stable_steps: 600
+  num_decay_steps: 200
+  min_lr_ratio: 0.1
+  num_cycles: 0.5
+  
+learning_rate: 5.3e-6
+max_grad_norm: 1.0
+
+train_on_inputs: false
+group_by_length: false
+
+bf16: true
+tf32: true  
+early_stopping_patience:
+resume_from_checkpoint:
+local_rank: 0
+logging_steps: 1
+gradient_checkpointing: true
+gradient_checkpointing_kwargs:
+  use_reentrant: false
+flash_attention: true
+
+# Disable distributed training to avoid MASTER_ADDR issues
+ddp_find_unused_parameters: false
+ddp_backend: null
+fsdp: 
+fsdp_config:
+
+# Force single process training mode
+deepspeed_config_path:
+deepspeed:
+
+warmup_steps: 200
+evals_per_epoch: 0
+saves_per_epoch: 0
+save_steps: 0.5
+
+# Logging configuration
+# wandb_project: grpo_dual_gpu_training
+# wandb_entity: your_entity
+# wandb_name: vllm_gpu0_training_gpu1
+# hub_model_id: 
